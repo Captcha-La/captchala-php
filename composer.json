@@ -1,0 +1,36 @@
+{
+    "name": "captchala/captchala-php",
+    "description": "Captchala Server SDK for PHP - Validate captcha tokens server-side",
+    "type": "library",
+    "version": "1.0.1",
+    "license": "MIT",
+    "keywords": ["captcha", "validation", "security", "bot-protection"],
+    "homepage": "https://captcha.la",
+    "authors": [
+        {
+            "name": "Captchala",
+            "email": "support@captcha.la"
+        }
+    ],
+    "require": {
+        "php": ">=8.0",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5 || ^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Captchala\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Captchala\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "minimum-stability": "stable"
+}
