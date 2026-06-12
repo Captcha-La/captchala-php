@@ -2,7 +2,6 @@
     "name": "captchala/captchala-php",
     "description": "Captchala Server SDK for PHP - Validate captcha tokens server-side",
     "type": "library",
-    "version": "1.0.1",
     "license": "MIT",
     "keywords": ["captcha", "validation", "security", "bot-protection"],
     "homepage": "https://captcha.la",
