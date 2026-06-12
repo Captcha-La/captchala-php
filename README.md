@@ -6,6 +6,7 @@ Server-side SDK for validating Captcha tokens.
 
 - [Website](https://captcha.la)
 - [Documentation](https://docs.captcha.la/sdk/server-php)
+- [Web SDK Documentation]([https://docs.captcha.la/sdk/server-php](https://docs.captcha.la/web-sdk))
 - [Dashboard](https://dash.captcha.la)
 
 ## Installation
