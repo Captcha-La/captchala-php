@@ -17,6 +17,8 @@ class ValidateResult
     private ?string $challengeId;
     private ?string $action;
     private ?string $uid;
+    private bool $degraded;
+    private ?string $degradedReason;
 
     public function __construct(
         bool $valid,
@@ -26,7 +28,9 @@ class ValidateResult
         ?string $warning = null,
         ?string $challengeId = null,
         ?string $action = null,
-        ?string $uid = null
+        ?string $uid = null,
+        bool $degraded = false,
+        ?string $degradedReason = null
     ) {
         $this->valid = $valid;
         $this->offline = $offline;
@@ -36,6 +40,8 @@ class ValidateResult
         $this->challengeId = $challengeId;
         $this->action = $action;
         $this->uid = $uid;
+        $this->degraded = $degraded;
+        $this->degradedReason = $degradedReason;
     }
 
     /**
@@ -106,6 +112,28 @@ class ValidateResult
     }
 
     /**
+     * Whether this token was issued under service degradation (dg_ prefix).
+     *
+     * Degraded tokens are ALWAYS invalid (isValid() === false). They are issued
+     * when the app's quota is exhausted so the end-user flow is not interrupted.
+     * Whether to accept the request anyway is YOUR decision, e.g.:
+     *
+     *   if ($result->isValid() || $result->isDegraded()) { ... allow ... }
+     */
+    public function isDegraded(): bool
+    {
+        return $this->degraded;
+    }
+
+    /**
+     * Degradation reason, e.g. 'quota_exhausted' (null when not degraded)
+     */
+    public function getDegradedReason(): ?string
+    {
+        return $this->degradedReason;
+    }
+
+    /**
      * Convert to array
      */
     public function toArray(): array
@@ -119,6 +147,8 @@ class ValidateResult
             'challenge_id' => $this->challengeId,
             'action' => $this->action,
             'uid' => $this->uid,
+            'degraded' => $this->degraded,
+            'degraded_reason' => $this->degradedReason,
         ];
     }
 }

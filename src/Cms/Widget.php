@@ -41,6 +41,14 @@ final class Widget
     public const LOADER_URL = 'https://cdn.captcha-cdn.net/captchala-loader.js';
 
     /**
+     * Render the widget as a single HTML string (markup + loader script
+     * tag + inline boot script). Use this for plain-PHP / non-WP hosts.
+     *
+     * WordPress integrations should prefer renderParts() so they can
+     * pipe the JS pieces through wp_enqueue_script / wp_add_inline_script
+     * and only echo the markup via wp_kses — required by wordpress.org's
+     * plugin review.
+     *
      * @param array<string,mixed> $opts
      */
     public static function renderHtml(
@@ -49,6 +57,35 @@ final class Widget
         string $action,
         array $opts = []
     ): string {
+        $parts = self::renderParts($appKey, $serverToken, $action, $opts);
+        return $parts['markup']
+            . '<script src="' . self::esc($parts['loader_url']) . '" defer></script>'
+            . '<script>' . $parts['inline_script'] . '</script>';
+    }
+
+    /**
+     * Same widget, broken into the three pieces a WP-style host needs to
+     * register separately:
+     *
+     *   markup         — `<div data-*>` element + hidden `<input>`.
+     *                    Safe to echo via wp_kses with a div+input whitelist.
+     *   loader_url     — Public CDN URL for the loader.js bundle. Feed to
+     *                    wp_register_script / wp_enqueue_script.
+     *   inline_script  — Body of the per-widget bootstrap. Feed to
+     *                    wp_add_inline_script() so it's printed inside
+     *                    `<script>` tags that wp.org's checker recognises.
+     *   element_id     — DOM id of the widget div, in case the host needs
+     *                    it for additional inline scripts.
+     *
+     * @param array<string,mixed> $opts
+     * @return array{markup:string,loader_url:string,inline_script:string,element_id:string}
+     */
+    public static function renderParts(
+        string $appKey,
+        string $serverToken,
+        string $action,
+        array $opts = []
+    ): array {
         if (!Action::isValid($action)) {
             throw new \InvalidArgumentException(
                 sprintf('Unknown CaptchaLa action: %s', $action)
@@ -145,10 +182,11 @@ final class Widget
         $hidden = '<input type="hidden" name="captchala_token" value="">';
 
         $loader = !empty($opts['loader_url']) ? (string)$opts['loader_url'] : self::LOADER_URL;
-        $loaderScript = '<script src="' . self::esc($loader) . '" defer></script>';
 
-        // Inline bootstrap. Reads data-* off the div, waits for window.loadCaptchala,
-        // and configures the widget per product mode.
+        // Inline bootstrap body (no surrounding <script> tags — callers wrap
+        // them or pass through wp_add_inline_script). Reads data-* off the
+        // div, waits for window.loadCaptchala, and configures the widget per
+        // product mode.
         //
         //   bind    — intercept form submit; auto-detect submit button in closest <form>
         //   popup   — same as bind (button-bound trigger)
@@ -158,7 +196,7 @@ final class Widget
         // which goes through HTML normalization that turns `&&` into `&#038;&#038;`
         // and breaks the JS. We avoid `&&` by using ternaries / nested ifs, and
         // avoid `<` by using `!==` length checks instead of `i<n` loops.
-        $boot = '<script>(function(){'
+        $boot = '(function(){'
             . 'var id=' . json_encode($elemId, JSON_UNESCAPED_SLASHES) . ';'
             . 'function findSubmit(form){'
             .     'if(!form){return null;}'
@@ -250,9 +288,14 @@ final class Widget
             . 'if(document.readyState==="loading"){'
             .     'document.addEventListener("DOMContentLoaded",ready);'
             . '}else{ready();}'
-            . '})();</script>';
+            . '})();';
 
-        return $div . $hidden . $loaderScript . $boot;
+        return [
+            'markup'        => $div . $hidden,
+            'loader_url'    => $loader,
+            'inline_script' => $boot,
+            'element_id'    => $elemId,
+        ];
     }
 
     private static function esc(string $v): string

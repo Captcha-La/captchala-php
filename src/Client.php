@@ -178,6 +178,20 @@ class Client
             );
         }
 
+        // Degraded token (dg_ prefix): issued when the app's quota is exhausted
+        // so end-user flows are not interrupted. valid is ALWAYS false (secure
+        // default); the integrator decides whether to accept via isDegraded().
+        if (!empty($data['degraded'])) {
+            return new ValidateResult(
+                valid: false,
+                offline: $isOffline,
+                clientOnly: false,
+                error: $data['error'] ?? null,
+                degraded: true,
+                degradedReason: isset($data['reason']) && is_string($data['reason']) ? $data['reason'] : 'quota_exhausted',
+            );
+        }
+
         $error = $data['error'] ?? $response['msg'] ?? 'unknown_error';
         return new ValidateResult(false, $isOffline, false, $error);
     }
