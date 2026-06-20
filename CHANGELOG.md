@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-06-20
+
+### Changed
+- `Client::validate()` no longer sends `client_ip`; the dashboard no longer
+  gates pass/fail on a caller-supplied IP. Cross-domain + dual-stack
+  (IPv4/IPv6) made a solve-vs-submit IP comparison reject legitimate users
+  (`binding_mismatch`). Matches Turnstile / reCAPTCHA (optional soft
+  `remoteip`) and Geetest (records + returns the IP). The `$clientIp`
+  parameter stays on the signature for backward compatibility but is ignored
+  — **no breaking change**, this only relaxes a check.
+
+### Added
+- `ValidateResult::getUserIp()` — end-user IP recorded at solve time
+  (informational, like Geetest `captcha_args.user_ip`). Other solve-context
+  fields (e.g. `referer` for web) are returned by the dashboard in the raw
+  validate response and are not surfaced as typed SDK getters.
+
 ## [1.0.0] - 2026-05-07
 
 ### Added

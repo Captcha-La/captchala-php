@@ -54,9 +54,11 @@ if ($result->isValid()) {
 
 - `$token` - 前端 SDK 返回的 pass_token
 - `$keepToken` - 是否保留 Token 不消费（可重复验证），默认 false
-- `$clientIp` - *可选* 终端用户 IP, 用于 `bind_ip` 校验。如果原 `pass_token` 签发时
-  绑定了 IP, 这里传你入站请求里取到的真实 IP, 后端会比对; 不匹配会拒绝。
-  传 `null` 或 `''` 则跳过, 该字段不会进入请求 body。
+- `$clientIp` - *（已废弃，被忽略）* 仅为向后兼容保留。该 IP **不再发送、也不参与
+  pass/fail 判定**：跨域 CDN + 双栈(IPv4/IPv6)下,用户解 challenge 走一个地址族、
+  提交表单走另一个族,硬比对会误杀正常用户。这与 Turnstile / reCAPTCHA(remoteip 为
+  可选软信号)及 Geetest(记录 IP 并返回)一致。平台在解题时观测到的 IP 通过
+  `ValidateResult::getUserIp()` 返回,供你做日志/风控。
 
 ### `ValidateResult` 方法
 
@@ -70,6 +72,7 @@ if ($result->isValid()) {
 | `getChallengeId()` | ?string | 获取挑战 ID |
 | `getAction()` | ?string | 获取业务动作 |
 | `getUid()` | ?string | server_token 签发时绑定的 user ID, 用于核对 pass_token 是否给预期用户的 |
+| `getUserIp()` | ?string | 解题时记录的终端用户 IP。**仅供参考**,不参与 pass/fail,不要用它做门禁 |
 | `toArray()` | array | 转换为数组 |
 
 ### 校验 `bind_uid`

@@ -19,6 +19,7 @@ class ValidateResult
     private ?string $uid;
     private bool $degraded;
     private ?string $degradedReason;
+    private ?string $userIp;
 
     public function __construct(
         bool $valid,
@@ -30,7 +31,8 @@ class ValidateResult
         ?string $action = null,
         ?string $uid = null,
         bool $degraded = false,
-        ?string $degradedReason = null
+        ?string $degradedReason = null,
+        ?string $userIp = null
     ) {
         $this->valid = $valid;
         $this->offline = $offline;
@@ -42,6 +44,7 @@ class ValidateResult
         $this->uid = $uid;
         $this->degraded = $degraded;
         $this->degradedReason = $degradedReason;
+        $this->userIp = $userIp;
     }
 
     /**
@@ -134,6 +137,20 @@ class ValidateResult
     }
 
     /**
+     * The end-user IP the platform recorded when the challenge was solved.
+     *
+     * Informational only — comparable to Geetest's captcha_args.user_ip. It is
+     * NOT used for the pass/fail decision (cross-domain + dual-stack IPv4/IPv6
+     * make a solve-vs-submit IP comparison unreliable), so do not gate on it;
+     * use it for logging / your own risk scoring if helpful. Null when the
+     * platform didn't record an IP.
+     */
+    public function getUserIp(): ?string
+    {
+        return $this->userIp;
+    }
+
+    /**
      * Convert to array
      */
     public function toArray(): array
@@ -149,6 +166,7 @@ class ValidateResult
             'uid' => $this->uid,
             'degraded' => $this->degraded,
             'degraded_reason' => $this->degradedReason,
+            'user_ip' => $this->userIp,
         ];
     }
 }

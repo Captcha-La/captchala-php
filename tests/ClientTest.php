@@ -141,8 +141,12 @@ class ClientTest extends TestCase
         $this->assertContains('X-App-Secret: s', $capturedHeaders);
     }
 
-    public function testValidateWithClientIpAddsFieldToBody(): void
+    public function testValidateNeverSendsClientIp(): void
     {
+        // The client_ip param is kept on the signature for backward compat but
+        // is no longer transmitted: the dashboard doesn't gate on a
+        // caller-supplied IP (cross-domain / dual-stack). It must never appear
+        // in the request body, even when a caller passes one.
         $client = new Client('k', 's');
         $capturedBody = null;
         $client->setTransport(function (string $url, array $body, array $headers) use (&$capturedBody) {
@@ -151,27 +155,28 @@ class ClientTest extends TestCase
         });
 
         $result = $client->validate('pt_x', false, '203.0.113.9');
-
         $this->assertTrue($result->isValid());
-        $this->assertEquals('203.0.113.9', $capturedBody['client_ip']);
-    }
+        $this->assertArrayNotHasKey('client_ip', $capturedBody);
 
-    public function testValidateWithEmptyClientIpOmitsField(): void
-    {
-        $client = new Client('k', 's');
         $capturedBody = null;
-        $client->setTransport(function (string $url, array $body, array $headers) use (&$capturedBody) {
-            $capturedBody = $body;
-            return ['code' => 0, 'msg' => 'ok', 'data' => ['valid' => true]];
-        });
-
-        // Empty string is treated same as null — field omitted.
         $client->validate('pt_x', false, '');
         $this->assertArrayNotHasKey('client_ip', $capturedBody);
 
         $capturedBody = null;
         $client->validate('pt_x', false, null);
         $this->assertArrayNotHasKey('client_ip', $capturedBody);
+    }
+
+    public function testValidateParsesUserIpFromResponse(): void
+    {
+        $client = new Client('k', 's');
+        $client->setTransport(function (string $url, array $body, array $headers) {
+            return ['code' => 0, 'msg' => 'ok', 'data' => ['valid' => true, 'user_ip' => '198.51.100.7']];
+        });
+
+        $result = $client->validate('pt_x');
+        $this->assertTrue($result->isValid());
+        $this->assertSame('198.51.100.7', $result->getUserIp());
     }
 
     public function testNetworkErrorReturnsRequestFailed(): void
