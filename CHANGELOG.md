@@ -5,22 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.2.0] - 2026-06-20
-
-### Changed
-- `Client::validate()` no longer sends `client_ip`; the dashboard no longer
-  gates pass/fail on a caller-supplied IP. Cross-domain + dual-stack
-  (IPv4/IPv6) made a solve-vs-submit IP comparison reject legitimate users
-  (`binding_mismatch`). Matches Turnstile / reCAPTCHA (optional soft
-  `remoteip`) and Geetest (records + returns the IP). The `$clientIp`
-  parameter stays on the signature for backward compatibility but is ignored
-  — **no breaking change**, this only relaxes a check.
+## [1.2.3] - 2026-06-20
 
 ### Added
-- `ValidateResult::getUserIp()` — end-user IP recorded at solve time
-  (informational, like Geetest `captcha_args.user_ip`). Other solve-context
-  fields (e.g. `referer` for web) are returned by the dashboard in the raw
-  validate response and are not surfaced as typed SDK getters.
+- `ValidateResult::getUserIp()` — end-user IP recorded at solve time.
+- `ValidateResult::getCaptchaArgs()` — solve-context echo returned by the
+  dashboard: `platform`, `user_ip`, `referer` (web page URL), `pkg` (native app
+  id), `solved_at` (unix seconds), `risk_score` (0-100). All informational.
+
+### Changed
+- `validate()`'s `$clientIp` is now **optional but recommended** — pass the
+  end-user IP if you have it (used for additional risk checks), or omit it.
+  The IP is no longer used for an exact solve-vs-submit comparison (which
+  rejected legitimate users under CDN + dual-stack IPv4/IPv6). Backward
+  compatible: the parameter is unchanged and existing calls keep working.
+
+> Note: 1.2.0–1.2.2 were same-day iterations toward this final shape; 1.2.3 is
+> the accurate, stable state.
 
 ## [1.0.0] - 2026-05-07
 
