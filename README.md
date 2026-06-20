@@ -55,20 +55,13 @@ Validate a token.
 
 - `$token` - The pass_token from frontend SDK
 - `$keepToken` - If true, token won't be consumed (can be validated again)
-- `$clientIp` - *(deprecated, ignored)* Kept for backward compatibility only.
-  The IP is **no longer sent or used for the pass/fail decision**: across a
-  CDN + dual-stack (IPv4/IPv6) setup the visitor solves the challenge over one
-  address family and submits your form over another, so comparing them rejects
-  legitimate users. This mirrors Turnstile / reCAPTCHA (where `remoteip` is an
-  optional soft signal) and Geetest (which records the IP and returns it). The
-  IP the platform observed at solve time is returned via
-  `ValidateResult::getUserIp()` for your own logging / risk use.
+- `$clientIp` - *(optional, recommended)* The end-user's IP from your inbound
+  request. Used for additional risk checks. Safe to omit.
 
 ```php
-$result = $client->validate($token);
+$result = $client->validate($token, false, $request->ip());
 if ($result->isValid()) {
     // ... let the request through ...
-    $solveIp = $result->getUserIp(); // informational only — do NOT gate on it
 }
 ```
 
@@ -84,7 +77,7 @@ if ($result->isValid()) {
 | `getChallengeId()` | ?string | Get challenge ID |
 | `getAction()` | ?string | Get business action |
 | `getUid()` | ?string | User ID bound via `bind_uid` — verify the pass_token belongs to the expected user |
-| `getUserIp()` | ?string | End-user IP recorded at solve time. **Informational only** — not used for pass/fail; do not gate on it. |
+| `getUserIp()` | ?string | End-user IP recorded at solve time (informational). |
 | `getCaptchaArgs()` | array | Solve-context echo (`platform`, `user_ip`, `referer`, `pkg`, `solved_at`, `risk_score`). All informational. |
 | `toArray()` | array | Convert to array |
 

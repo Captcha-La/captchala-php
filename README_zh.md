@@ -54,11 +54,8 @@ if ($result->isValid()) {
 
 - `$token` - 前端 SDK 返回的 pass_token
 - `$keepToken` - 是否保留 Token 不消费（可重复验证），默认 false
-- `$clientIp` - *（已废弃，被忽略）* 仅为向后兼容保留。该 IP **不再发送、也不参与
-  pass/fail 判定**：跨域 CDN + 双栈(IPv4/IPv6)下,用户解 challenge 走一个地址族、
-  提交表单走另一个族,硬比对会误杀正常用户。这与 Turnstile / reCAPTCHA(remoteip 为
-  可选软信号)及 Geetest(记录 IP 并返回)一致。平台在解题时观测到的 IP 通过
-  `ValidateResult::getUserIp()` 返回,供你做日志/风控。
+- `$clientIp` - *(可选，建议传)* 从你的入站请求里取到的终端用户 IP,用于额外的风控
+  校验。不传也可以。
 
 ### `ValidateResult` 方法
 

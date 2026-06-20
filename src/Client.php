@@ -148,24 +148,16 @@ class Client
             $isOffline = false;
         }
 
-        // Build request body.
-        //
-        // $clientIp is intentionally NOT sent. The dashboard no longer uses an
-        // integrator-supplied IP for the pass/fail decision: cross-domain +
-        // dual-stack (IPv4/IPv6) means the same visitor solves the challenge
-        // over one address family and submits the form over another, so a
-        // solve-vs-submit IP comparison rejects legitimate users. This matches
-        // Turnstile / reCAPTCHA (remoteip is an optional soft signal, never a
-        // hard gate) and Geetest (records the IP server-side, returns it). The
-        // IP the platform saw at solve time comes back as `user_ip` below
-        // (ValidateResult::getUserIp()).
-        //
-        // The $clientIp parameter stays on the signature so existing callers
-        // using validate($token, false, $ip) keep working unchanged.
+        // Build request body. $clientIp is OPTIONAL but RECOMMENDED — pass the
+        // end-user's IP from your inbound request; it is used for additional
+        // risk checks. Safe to omit.
         $body = [
             'pass_token' => $token,
             'keep_token' => $keepToken,
         ];
+        if ($clientIp !== null && $clientIp !== '') {
+            $body['client_ip'] = $clientIp;
+        }
 
         $response = $this->request($apiUrl, $body);
 
