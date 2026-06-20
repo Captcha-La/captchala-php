@@ -20,7 +20,12 @@ class ValidateResult
     private bool $degraded;
     private ?string $degradedReason;
     private ?string $userIp;
+    /** @var array<string,mixed> */
+    private array $captchaArgs;
 
+    /**
+     * @param array<string,mixed> $captchaArgs
+     */
     public function __construct(
         bool $valid,
         bool $offline = false,
@@ -32,7 +37,8 @@ class ValidateResult
         ?string $uid = null,
         bool $degraded = false,
         ?string $degradedReason = null,
-        ?string $userIp = null
+        ?string $userIp = null,
+        array $captchaArgs = []
     ) {
         $this->valid = $valid;
         $this->offline = $offline;
@@ -45,6 +51,7 @@ class ValidateResult
         $this->degraded = $degraded;
         $this->degradedReason = $degradedReason;
         $this->userIp = $userIp;
+        $this->captchaArgs = $captchaArgs;
     }
 
     /**
@@ -151,6 +158,19 @@ class ValidateResult
     }
 
     /**
+     * Solve-context echo (Geetest-style captcha_args). All informational —
+     * never gate pass/fail on these. Keys: platform, user_ip, referer (web
+     * page URL), pkg (native app id), solved_at (unix seconds), risk_score
+     * (0-100). Missing values are null.
+     *
+     * @return array<string,mixed>
+     */
+    public function getCaptchaArgs(): array
+    {
+        return $this->captchaArgs;
+    }
+
+    /**
      * Convert to array
      */
     public function toArray(): array
@@ -167,6 +187,7 @@ class ValidateResult
             'degraded' => $this->degraded,
             'degraded_reason' => $this->degradedReason,
             'user_ip' => $this->userIp,
+            'captcha_args' => $this->captchaArgs,
         ];
     }
 }

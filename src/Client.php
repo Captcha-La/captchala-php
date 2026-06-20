@@ -188,6 +188,7 @@ class Client
                 // user_ip lives inside captcha_args (Geetest-style); accept a
                 // top-level user_ip too for forward/backward tolerance.
                 userIp: self::extractUserIp($data),
+                captchaArgs: isset($data['captcha_args']) && is_array($data['captcha_args']) ? $data['captcha_args'] : [],
             );
         }
 

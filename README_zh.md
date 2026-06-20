@@ -73,7 +73,24 @@ if ($result->isValid()) {
 | `getAction()` | ?string | 获取业务动作 |
 | `getUid()` | ?string | server_token 签发时绑定的 user ID, 用于核对 pass_token 是否给预期用户的 |
 | `getUserIp()` | ?string | 解题时记录的终端用户 IP。**仅供参考**,不参与 pass/fail,不要用它做门禁 |
+| `getCaptchaArgs()` | array | 解题上下文回显(`platform`/`user_ip`/`referer`/`pkg`/`solved_at`/`risk_score`),全部仅供参考 |
 | `toArray()` | array | 转换为数组 |
+
+### 解题上下文回显(`captcha_args`)
+
+`getCaptchaArgs()` 返回平台在**解题当时**记录的上下文,用于日志 / 你自己的二次风控,**不要拿来做 pass/fail 门禁**:
+
+```php
+$args = $result->getCaptchaArgs();
+// [
+//   'platform'   => 'web',          // web / android / ios / flutter / windows / ...
+//   'user_ip'    => '1.2.3.4',      // 解题时的用户 IP
+//   'referer'    => 'https://...',  // web: 解题页面 URL(native 为 null)
+//   'pkg'        => null,           // native: app 包名(web 为 null)
+//   'solved_at'  => 1750000000,     // unix 秒
+//   'risk_score' => 12,             // 0-100,越高越可疑
+// ]
+```
 
 ### 校验 `bind_uid`
 

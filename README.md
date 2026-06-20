@@ -85,7 +85,25 @@ if ($result->isValid()) {
 | `getAction()` | ?string | Get business action |
 | `getUid()` | ?string | User ID bound via `bind_uid` — verify the pass_token belongs to the expected user |
 | `getUserIp()` | ?string | End-user IP recorded at solve time. **Informational only** — not used for pass/fail; do not gate on it. |
+| `getCaptchaArgs()` | array | Solve-context echo (`platform`, `user_ip`, `referer`, `pkg`, `solved_at`, `risk_score`). All informational. |
 | `toArray()` | array | Convert to array |
+
+### Solve-context echo (`captcha_args`)
+
+`getCaptchaArgs()` returns what the platform recorded **at solve time** — use it
+for logging / your own risk scoring, never as a pass/fail gate:
+
+```php
+$args = $result->getCaptchaArgs();
+// [
+//   'platform'   => 'web',          // web / android / ios / flutter / windows / ...
+//   'user_ip'    => '1.2.3.4',      // end-user IP at solve time
+//   'referer'    => 'https://...',  // web: solve page URL (null on native)
+//   'pkg'        => null,           // native: app package id (null on web)
+//   'solved_at'  => 1750000000,     // unix seconds
+//   'risk_score' => 12,             // 0-100, higher = riskier
+// ]
+```
 
 ### Verifying `bind_uid`
 
