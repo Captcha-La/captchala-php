@@ -141,12 +141,10 @@ class ClientTest extends TestCase
         $this->assertContains('X-App-Secret: s', $capturedHeaders);
     }
 
-    public function testValidateNeverSendsClientIp(): void
+    public function testValidateSendsClientIpWhenProvided(): void
     {
-        // The client_ip param is kept on the signature for backward compat but
-        // is no longer transmitted: the dashboard doesn't gate on a
-        // caller-supplied IP (cross-domain / dual-stack). It must never appear
-        // in the request body, even when a caller passes one.
+        // client_ip is optional: sent when provided (used for risk checks),
+        // omitted when empty/null.
         $client = new Client('k', 's');
         $capturedBody = null;
         $client->setTransport(function (string $url, array $body, array $headers) use (&$capturedBody) {
@@ -156,7 +154,7 @@ class ClientTest extends TestCase
 
         $result = $client->validate('pt_x', false, '203.0.113.9');
         $this->assertTrue($result->isValid());
-        $this->assertArrayNotHasKey('client_ip', $capturedBody);
+        $this->assertSame('203.0.113.9', $capturedBody['client_ip']);
 
         $capturedBody = null;
         $client->validate('pt_x', false, '');
