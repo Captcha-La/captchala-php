@@ -185,7 +185,9 @@ class Client
                 challengeId: $data['challenge_id'] ?? null,
                 action: $data['action'] ?? null,
                 uid: isset($data['uid']) && is_string($data['uid']) ? $data['uid'] : null,
-                userIp: isset($data['user_ip']) && is_string($data['user_ip']) ? $data['user_ip'] : null,
+                // user_ip lives inside captcha_args (Geetest-style); accept a
+                // top-level user_ip too for forward/backward tolerance.
+                userIp: self::extractUserIp($data),
             );
         }
 
@@ -205,6 +207,24 @@ class Client
 
         $error = $data['error'] ?? $response['msg'] ?? 'unknown_error';
         return new ValidateResult(false, $isOffline, false, $error);
+    }
+
+    /**
+     * The dashboard returns the solve-time user IP inside `captcha_args`
+     * (Geetest-style). Older responses had it top-level; accept either.
+     *
+     * @param array<string,mixed> $data
+     */
+    private static function extractUserIp(array $data): ?string
+    {
+        $args = $data['captcha_args'] ?? null;
+        if (is_array($args) && isset($args['user_ip']) && is_string($args['user_ip'])) {
+            return $args['user_ip'];
+        }
+        if (isset($data['user_ip']) && is_string($data['user_ip'])) {
+            return $data['user_ip'];
+        }
+        return null;
     }
 
     /**
