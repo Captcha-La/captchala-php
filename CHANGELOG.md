@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.2.3] - 2026-06-20
+## [1.2.4] - 2026-06-21
+
+Re-release of 1.2.3 under a fresh tag (the 1.2.3 tag was moved after publish,
+so Packagist pinned the pre-fix commit). Same code; use 1.2.4.
 
 ### Added
 - `ValidateResult::getUserIp()` — end-user IP recorded at solve time.
@@ -20,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   rejected legitimate users under CDN + dual-stack IPv4/IPv6). Backward
   compatible: the parameter is unchanged and existing calls keep working.
 
-> Note: 1.2.0–1.2.2 were same-day iterations toward this final shape; 1.2.3 is
+> Note: 1.2.0–1.2.3 were same-day iterations toward this final shape; 1.2.4 is
 > the accurate, stable state.
 
 ## [1.0.0] - 2026-05-07
