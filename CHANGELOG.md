@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.5] - 2026-10-27
+
+### Security
+- Client-only tokens (`client_`, and now also the web SDK's `co_`) are no
+  longer accepted unconditionally. `validate()` probes the main API and then
+  the backup API (2s timeout each); if either answers with any HTTP response
+  the token is rejected: `isValid()=false`, `isClientOnly()=true`,
+  `getError()='client_only_rejected_api_reachable'`. The token is accepted
+  (`isValid()=true`, `isClientOnly()=true`) only when both endpoints are
+  unreachable. Positive reachability results are cached in-process for 30
+  seconds. Previously any string starting with `client_` passed without a
+  network call.
+
+### Added
+- `Client::PREFIX_CLIENT_WEB` (`co_`), `Client::PREFIX_DEGRADED` (`dg_`),
+  `Client::ERROR_CLIENT_ONLY_REJECTED`, `Client::isClientOnlyToken()`.
+
+### Fixed
+- A JSON body that is not an object (or a `data` / `error` / `msg` field of an
+  unexpected type) no longer throws `TypeError` under `strict_types`; it is
+  reported as `request_failed` / `unknown_error`.
+- A `code:0` body on a non-2xx HTTP status is never treated as success.
+- cURL requests now also set a connect timeout.
+
+### Notes
+- `moderationCheck()` / `moderationText()` still send `app_key` / `app_secret`
+  in the request body in addition to the auth headers. This is redundant but
+  kept for backward compatibility with older server versions.
+
 ## [1.2.4] - 2026-06-21
 
 Re-release of 1.2.3 under a fresh tag (the 1.2.3 tag was moved after publish,

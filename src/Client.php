@@ -39,7 +39,26 @@ class Client
     // Token prefixes
     public const PREFIX_MAIN = 'pt_';        // Main API token
     public const PREFIX_OFFLINE = 'offline_'; // Backup/offline token
-    public const PREFIX_CLIENT = 'client_';   // Client-only token
+    public const PREFIX_CLIENT = 'client_';   // Client-only token (native SDKs)
+    public const PREFIX_CLIENT_WEB = 'co_';   // Client-only token (web SDK), handled like client_
+    public const PREFIX_DEGRADED = 'dg_';     // Degraded token (e.g. quota exhausted), see isDegraded()
+
+    /** Error code returned when a client-only token arrives while the API is reachable. */
+    public const ERROR_CLIENT_ONLY_REJECTED = 'client_only_rejected_api_reachable';
+
+    /** Reachability probe timeout (seconds) used for client-only tokens. */
+    public const PROBE_TIMEOUT = 2;
+
+    /** How long (seconds) a positive reachability probe is cached in-process. */
+    public const REACHABILITY_CACHE_TTL = 30;
+
+    /**
+     * Per-URL unix timestamp until which the endpoint is known reachable.
+     * Only positive results are cached.
+     *
+     * @var array<string,float>
+     */
+    private static array $reachableUntil = [];
 
     /**
      * Optional override for the main API endpoint. Mainly used for tests.
@@ -126,15 +145,13 @@ class Client
             return new ValidateResult(false, false, false, 'empty_token');
         }
 
-        // Client-only token (client_ prefix)
-        // Cannot be verified server-side
-        if (str_starts_with($token, self::PREFIX_CLIENT)) {
-            return new ValidateResult(
-                valid: true,
-                offline: true,
-                clientOnly: true,
-                warning: 'Client-only token cannot be verified server-side'
-            );
+        // Client-only placeholders (client_ from native SDKs, co_ from the web
+        // SDK) are minted on the device only when BOTH the main API and the
+        // backup service were unreachable. They carry no signature and no
+        // server record, so they are accepted only if this server cannot reach
+        // either endpoint either (a genuine total outage).
+        if (self::isClientOnlyToken($token)) {
+            return $this->validateClientOnly();
         }
 
         // Select API based on token prefix
@@ -167,15 +184,15 @@ class Client
 
         // Parse response
         $code = $response['code'] ?? -1;
-        $data = $response['data'] ?? [];
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
 
         if ($code === 0 && ($data['valid'] ?? $data['ok'] ?? false)) {
             return new ValidateResult(
                 valid: true,
                 offline: $isOffline,
                 clientOnly: false,
-                challengeId: $data['challenge_id'] ?? null,
-                action: $data['action'] ?? null,
+                challengeId: self::strOrNull($data['challenge_id'] ?? null),
+                action: self::strOrNull($data['action'] ?? null),
                 uid: isset($data['uid']) && is_string($data['uid']) ? $data['uid'] : null,
                 // user_ip lives inside captcha_args (Geetest-style); accept a
                 // top-level user_ip too for forward/backward tolerance.
@@ -192,14 +209,114 @@ class Client
                 valid: false,
                 offline: $isOffline,
                 clientOnly: false,
-                error: $data['error'] ?? null,
+                error: self::strOrNull($data['error'] ?? null),
                 degraded: true,
                 degradedReason: isset($data['reason']) && is_string($data['reason']) ? $data['reason'] : 'quota_exhausted',
             );
         }
 
         $error = $data['error'] ?? $response['msg'] ?? 'unknown_error';
-        return new ValidateResult(false, $isOffline, false, $error);
+        return new ValidateResult(false, $isOffline, false, self::strOrNull($error) ?? 'unknown_error');
+    }
+
+    /**
+     * Coerce a scalar JSON value to string; anything else becomes null.
+     * Keeps strict_types from throwing TypeError on unexpected payloads.
+     */
+    private static function strOrNull(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (string)$value;
+        }
+        return null;
+    }
+
+    /**
+     * Whether the token is a device-minted client-only placeholder (client_ or co_).
+     */
+    public static function isClientOnlyToken(string $token): bool
+    {
+        return str_starts_with($token, self::PREFIX_CLIENT)
+            || str_starts_with($token, self::PREFIX_CLIENT_WEB);
+    }
+
+    /**
+     * Decide a client-only token by probing reachability:
+     * main API reachable -> reject; else backup API reachable -> reject (the
+     * device should have obtained an offline_ token); both unreachable -> accept.
+     */
+    private function validateClientOnly(): ValidateResult
+    {
+        if ($this->probeReachable($this->baseUrl ?? self::MAIN_API_URL)) {
+            return new ValidateResult(
+                valid: false,
+                offline: true,
+                clientOnly: true,
+                error: self::ERROR_CLIENT_ONLY_REJECTED,
+                warning: 'Client-only token rejected: main API is reachable'
+            );
+        }
+        if ($this->probeReachable($this->backupUrl ?? self::BACKUP_API_URL)) {
+            return new ValidateResult(
+                valid: false,
+                offline: true,
+                clientOnly: true,
+                error: self::ERROR_CLIENT_ONLY_REJECTED,
+                warning: 'Client-only token rejected: backup API is reachable'
+            );
+        }
+        return new ValidateResult(
+            valid: true,
+            offline: true,
+            clientOnly: true,
+            warning: 'Client-only token accepted: Captchala API unreachable, token cannot be verified server-side'
+        );
+    }
+
+    /**
+     * Clear the in-process reachability cache.
+     *
+     * @internal Intended for tests.
+     */
+    public static function resetReachabilityCache(): void
+    {
+        self::$reachableUntil = [];
+    }
+
+    /**
+     * Whether $url answers with ANY HTTP response within PROBE_TIMEOUT seconds.
+     * Transport errors and timeouts mean unreachable.
+     */
+    private function probeReachable(string $url): bool
+    {
+        $now = microtime(true);
+        if (isset(self::$reachableUntil[$url]) && self::$reachableUntil[$url] > $now) {
+            return true;
+        }
+
+        $body = ['pass_token' => '', 'keep_token' => true];
+        $headers = [
+            'Content-Type: application/json',
+            'X-App-Key: ' . $this->appKey,
+            'X-App-Secret: ' . $this->appSecret,
+        ];
+
+        if ($this->transport !== null) {
+            // Injected transport: null means transport failure, anything else is a response.
+            $reachable = ($this->transport)($url, $body, $headers) !== null;
+        } elseif (function_exists('curl_init')) {
+            $reachable = $this->rawRequestWithCurl($url, $body, $headers, self::PROBE_TIMEOUT) !== null;
+        } else {
+            $reachable = $this->rawRequestWithStream($url, $body, $headers, self::PROBE_TIMEOUT) !== null;
+        }
+
+        if ($reachable) {
+            self::$reachableUntil[$url] = microtime(true) + self::REACHABILITY_CACHE_TTL;
+        }
+        return $reachable;
     }
 
     /**
@@ -259,7 +376,7 @@ class Client
             return new IssueResult(false, error: 'request_failed', message: 'transport error');
         }
         $code = $response['code'] ?? -1;
-        $data = $response['data'] ?? [];
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
         if ($code === 0 && !empty($data['server_token'])) {
             return new IssueResult(
                 ok: true,
@@ -270,8 +387,8 @@ class Client
         }
         return new IssueResult(
             ok: false,
-            error: $response['error'] ?? $data['error'] ?? 'unknown_error',
-            message: $response['msg'] ?? $response['message'] ?? null,
+            error: self::strOrNull($response['error'] ?? $data['error'] ?? null) ?? 'unknown_error',
+            message: self::strOrNull($response['msg'] ?? $response['message'] ?? null),
         );
     }
 
@@ -331,7 +448,7 @@ class Client
             return new ModerationResult(false, error: 'request_failed', message: 'transport error');
         }
         $code = $response['code'] ?? -1;
-        $data = $response['data'] ?? [];
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
         if ($code === 0) {
             return new ModerationResult(
                 ok: true,
@@ -343,8 +460,8 @@ class Client
         }
         return new ModerationResult(
             ok: false,
-            error: $response['error'] ?? $data['error'] ?? 'unknown_error',
-            message: $response['msg'] ?? $response['message'] ?? null,
+            error: self::strOrNull($response['error'] ?? $data['error'] ?? null) ?? 'unknown_error',
+            message: self::strOrNull($response['msg'] ?? $response['message'] ?? null),
         );
     }
 
@@ -361,22 +478,54 @@ class Client
 
         // Injected transport (used in tests)
         if ($this->transport !== null) {
-            return ($this->transport)($url, $data, $headers);
+            $result = ($this->transport)($url, $data, $headers);
+            return is_array($result) ? $result : null;
         }
 
         // Prefer cURL
         if (function_exists('curl_init')) {
-            return $this->requestWithCurl($url, $data, $headers);
+            $raw = $this->rawRequestWithCurl($url, $data, $headers, $this->timeout);
+        } else {
+            // Fallback to file_get_contents
+            $raw = $this->rawRequestWithStream($url, $data, $headers, $this->timeout);
         }
 
-        // Fallback to file_get_contents
-        return $this->requestWithStream($url, $data, $headers);
+        return self::decodeResponse($raw);
     }
 
     /**
-     * Make request using cURL
+     * Decode a raw [status, body] pair into the {code, msg, data} envelope.
+     * Returns null (handled as 'request_failed') on transport failure or when
+     * the body is not a JSON object. A code:0 body on a non-2xx status is
+     * never treated as success.
+     *
+     * @param array{0:int,1:string}|null $raw
      */
-    private function requestWithCurl(string $url, array $data, array $headers): ?array
+    private static function decodeResponse(?array $raw): ?array
+    {
+        if ($raw === null) {
+            return null;
+        }
+        [$status, $body] = $raw;
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+        if ($status !== 0 && ($status < 200 || $status > 299) && ($decoded['code'] ?? -1) === 0) {
+            $decoded['code'] = -1;
+            if (!isset($decoded['msg']) || $decoded['msg'] === '') {
+                $decoded['msg'] = 'http_' . $status;
+            }
+        }
+        return $decoded;
+    }
+
+    /**
+     * POST using cURL. Returns [httpStatus, body] or null on transport failure.
+     *
+     * @return array{0:int,1:string}|null
+     */
+    private function rawRequestWithCurl(string $url, array $data, array $headers, int $timeout): ?array
     {
         $ch = curl_init($url);
 
@@ -385,33 +534,38 @@ class Client
             CURLOPT_POSTFIELDS => json_encode($data),
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $this->timeout,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => $timeout,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
 
         $response = curl_exec($ch);
         $error = curl_error($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
 
-        if ($error || $response === false) {
+        if ($error || $response === false || $status === 0) {
             return null;
         }
 
-        return json_decode($response, true);
+        return [$status, (string)$response];
     }
 
     /**
-     * Make request using file_get_contents (fallback)
+     * POST using file_get_contents (fallback). Returns [httpStatus, body] or
+     * null on transport failure. httpStatus is 0 if it cannot be determined.
+     *
+     * @return array{0:int,1:string}|null
      */
-    private function requestWithStream(string $url, array $data, array $headers): ?array
+    private function rawRequestWithStream(string $url, array $data, array $headers, int $timeout): ?array
     {
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
                 'header' => implode("\r\n", $headers),
                 'content' => json_encode($data),
-                'timeout' => $this->timeout,
+                'timeout' => $timeout,
                 'ignore_errors' => true,
             ],
             'ssl' => [
@@ -420,12 +574,19 @@ class Client
             ],
         ]);
 
+        $http_response_header = [];
         $response = @file_get_contents($url, false, $context);
 
         if ($response === false) {
             return null;
         }
 
-        return json_decode($response, true);
+        $status = 0;
+        if (isset($http_response_header[0])
+            && preg_match('#^HTTP/\S+\s+(\d{3})#', (string)$http_response_header[0], $m)) {
+            $status = (int)$m[1];
+        }
+
+        return [$status, $response];
     }
 }

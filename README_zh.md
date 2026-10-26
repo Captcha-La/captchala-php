@@ -169,7 +169,21 @@ $result = $client->moderationText('user comment here', $user->id);
 |------|------|---------|
 | `pt_` | 主服务 | 高 |
 | `offline_` | 备用服务 | 中 |
-| `client_` | 纯客户端 | 低（无法服务端验证） |
+| `dg_` | 主服务降级签发（如额度耗尽） | `isValid()` 恒为 `false`，按 `isDegraded()` 自行决定 |
+| `client_` | 纯客户端占位（原生 SDK） | 无 — 见下文 |
+| `co_` | 纯客户端占位（Web SDK） | 无 — 见下文 |
+
+### 纯客户端 Token（`client_` / `co_`）
+
+仅当设备**同时**无法连接主服务和备用服务时才会在本地生成，没有签名、服务端无记录。
+自 v1.2.5 起 SDK 不再无条件放行：
+
+1. 探测主服务（超时 2 秒），只要有任意 HTTP 响应即说明没有故障 →
+   `isValid()=false`、`isClientOnly()=true`、`getError()='client_only_rejected_api_reachable'`。
+2. 否则探测备用服务（超时 2 秒），有任意 HTTP 响应同样拒绝（设备本应拿到 `offline_` Token）。
+3. 只有两者都不可达（网络错误/超时）时才 `isValid()=true`、`isClientOnly()=true`、`isOffline()=true`。
+
+"可达"结果在进程内（每个 PHP worker）缓存 30 秒。可用 `Client::isClientOnlyToken($token)` 判断前缀。
 
 ## 完整示例
 

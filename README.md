@@ -180,7 +180,26 @@ $result = $client->moderationText('user comment here', $user->id);
 |--------|--------|----------------|
 | `pt_` | Main API | High |
 | `offline_` | Backup Service | Medium |
-| `client_` | Client-only | Low (cannot verify server-side) |
+| `dg_` | Main API, degraded (e.g. quota exhausted) | `isValid()` is always `false`; check `isDegraded()` and decide yourself |
+| `client_` | Client-only placeholder (native SDKs) | None — see below |
+| `co_` | Client-only placeholder (web SDK) | None — see below |
+
+### Client-only tokens (`client_` / `co_`)
+
+These placeholders are minted on the device only when **both** the main API
+and the backup service were unreachable. They carry no signature and no server
+record. Since v1.2.5 the SDK no longer accepts them blindly:
+
+1. It probes the main API (2s timeout). Any HTTP response means there is no
+   outage → `isValid()=false`, `isClientOnly()=true`,
+   `getError()='client_only_rejected_api_reachable'`.
+2. Otherwise it probes the backup API (2s timeout). Any HTTP response → rejected
+   the same way (the device should have received an `offline_` token).
+3. Only if both are unreachable (network error / timeout) → `isValid()=true`,
+   `isClientOnly()=true`, `isOffline()=true`.
+
+A positive "reachable" probe result is cached in-process (per PHP worker) for
+30 seconds. Use `Client::isClientOnlyToken($token)` to detect these prefixes.
 
 ## Complete Example
 
