@@ -49,16 +49,29 @@ class Client
     /** Reachability probe timeout (seconds) used for client-only tokens. */
     public const PROBE_TIMEOUT = 2;
 
-    /** How long (seconds) a positive reachability probe is cached in-process. */
+    /** Error code returned when client-only tokens are refused by setRejectClientOnly(true). */
+    public const ERROR_CLIENT_ONLY_POLICY = 'client_only_rejected_by_policy';
+
+    /** How long (seconds) a positive reachability probe is cached. */
     public const REACHABILITY_CACHE_TTL = 30;
 
     /**
-     * Per-URL unix timestamp until which the endpoint is known reachable.
-     * Only positive results are cached.
-     *
-     * @var array<string,float>
+     * How long (seconds) a negative probe ("unreachable") is cached. Kept short so an outage
+     * does not make every request wait for two probe timeouts, while a brief network blip
+     * does not keep accepting client-only tokens for long.
      */
-    private static array $reachableUntil = [];
+    public const UNREACHABLE_CACHE_TTL = 5;
+
+    /**
+     * In-process probe cache: url => [reachable, unix time until which it holds].
+     * Shared across PHP-FPM workers through APCu when that extension is enabled.
+     *
+     * @var array<string,array{0:bool,1:float}>
+     */
+    private static array $probeCache = [];
+
+    /** When true, client-only tokens are always rejected without probing (see setRejectClientOnly). */
+    private bool $rejectClientOnly = false;
 
     /**
      * Optional override for the main API endpoint. Mainly used for tests.
@@ -117,6 +130,18 @@ class Client
     public function setIssueUrl(?string $url): void { $this->issueUrl = $url; }
     public function setModerationCheckUrl(?string $url): void { $this->moderationCheckUrl = $url; }
     public function setModerationTextUrl(?string $url): void { $this->moderationTextUrl = $url; }
+
+    /**
+     * Always reject client-only tokens (client_ / co_), even when the Captchala API is
+     * unreachable. Use it for sensitive actions such as login or payment, where failing
+     * closed during an outage is preferable to accepting an unverifiable token.
+     * Default false: such tokens are accepted only when both the main and the backup API
+     * are unreachable.
+     */
+    public function setRejectClientOnly(bool $reject): void
+    {
+        $this->rejectClientOnly = $reject;
+    }
 
     /**
      * Inject a custom transport. Intended for tests.
@@ -250,6 +275,15 @@ class Client
      */
     private function validateClientOnly(): ValidateResult
     {
+        if ($this->rejectClientOnly) {
+            return new ValidateResult(
+                valid: false,
+                offline: true,
+                clientOnly: true,
+                error: self::ERROR_CLIENT_ONLY_POLICY,
+                warning: 'Client-only token rejected: client-only tokens are disabled for this client'
+            );
+        }
         if ($this->probeReachable($this->baseUrl ?? self::MAIN_API_URL)) {
             return new ValidateResult(
                 valid: false,
@@ -283,7 +317,44 @@ class Client
      */
     public static function resetReachabilityCache(): void
     {
-        self::$reachableUntil = [];
+        self::$probeCache = [];
+        if (self::apcuOn() && class_exists('APCUIterator')) {
+            apcu_delete(new \APCUIterator('/^captchala_sdk_(reach|probe_lock):/'));
+        }
+    }
+
+    private static function apcuOn(): bool
+    {
+        return function_exists('apcu_enabled') && apcu_enabled();
+    }
+
+    /** Cached probe result for $url, or null when unknown / expired. */
+    private static function cachedProbe(string $url): ?bool
+    {
+        $now = microtime(true);
+        $hit = self::$probeCache[$url] ?? null;
+        if ($hit !== null && $hit[1] > $now) {
+            return $hit[0];
+        }
+        if (self::apcuOn()) {
+            $ok = false;
+            $v = apcu_fetch('captchala_sdk_reach:' . md5($url), $ok);
+            if ($ok && is_array($v) && isset($v[0], $v[1]) && $v[1] > $now) {
+                self::$probeCache[$url] = [(bool)$v[0], (float)$v[1]];
+                return (bool)$v[0];
+            }
+        }
+        return null;
+    }
+
+    private static function storeProbe(string $url, bool $reachable): void
+    {
+        $ttl = $reachable ? self::REACHABILITY_CACHE_TTL : self::UNREACHABLE_CACHE_TTL;
+        $entry = [$reachable, microtime(true) + $ttl];
+        self::$probeCache[$url] = $entry;
+        if (self::apcuOn()) {
+            apcu_store('captchala_sdk_reach:' . md5($url), $entry, $ttl);
+        }
     }
 
     /**
@@ -292,9 +363,27 @@ class Client
      */
     private function probeReachable(string $url): bool
     {
-        $now = microtime(true);
-        if (isset(self::$reachableUntil[$url]) && self::$reachableUntil[$url] > $now) {
-            return true;
+        $cached = self::cachedProbe($url);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // Single flight across PHP-FPM workers (APCu): while one worker probes $url, the
+        // others wait (bounded) for its cached result instead of probing in parallel.
+        $lock = null;
+        if (self::apcuOn()) {
+            $lock = 'captchala_sdk_probe_lock:' . md5($url);
+            if (!apcu_add($lock, 1, self::PROBE_TIMEOUT + 1)) {
+                $lock = null;
+                $deadline = microtime(true) + self::PROBE_TIMEOUT + 0.5;
+                while (microtime(true) < $deadline) {
+                    usleep(50000);
+                    $cached = self::cachedProbe($url);
+                    if ($cached !== null) {
+                        return $cached;
+                    }
+                }
+            }
         }
 
         $body = ['pass_token' => '', 'keep_token' => true];
@@ -304,17 +393,20 @@ class Client
             'X-App-Secret: ' . $this->appSecret,
         ];
 
-        if ($this->transport !== null) {
-            // Injected transport: null means transport failure, anything else is a response.
-            $reachable = ($this->transport)($url, $body, $headers) !== null;
-        } elseif (function_exists('curl_init')) {
-            $reachable = $this->rawRequestWithCurl($url, $body, $headers, self::PROBE_TIMEOUT) !== null;
-        } else {
-            $reachable = $this->rawRequestWithStream($url, $body, $headers, self::PROBE_TIMEOUT) !== null;
-        }
-
-        if ($reachable) {
-            self::$reachableUntil[$url] = microtime(true) + self::REACHABILITY_CACHE_TTL;
+        try {
+            if ($this->transport !== null) {
+                // Injected transport: null means transport failure, anything else is a response.
+                $reachable = ($this->transport)($url, $body, $headers) !== null;
+            } elseif (function_exists('curl_init')) {
+                $reachable = $this->rawRequestWithCurl($url, $body, $headers, self::PROBE_TIMEOUT) !== null;
+            } else {
+                $reachable = $this->rawRequestWithStream($url, $body, $headers, self::PROBE_TIMEOUT) !== null;
+            }
+            self::storeProbe($url, $reachable);
+        } finally {
+            if ($lock !== null) {
+                apcu_delete($lock);
+            }
         }
         return $reachable;
     }
@@ -365,7 +457,8 @@ class Client
             return new IssueResult(false, error: 'invalid_action', message: 'action is required');
         }
         $body = ['action' => $action];
-        if ($bindingIp !== null && $bindingIp !== '') $body['binding_ip'] = $bindingIp;
+        // Wire name is bind_ip (as in the API docs); the server still accepts the old binding_ip.
+        if ($bindingIp !== null && $bindingIp !== '') $body['bind_ip'] = $bindingIp;
         if ($ttl !== null)                            $body['ttl'] = $ttl;
         if ($maxUses !== null)                        $body['max_uses'] = $maxUses;
         if ($bindUid !== null && $bindUid !== '')     $body['bind_uid'] = $bindUid;

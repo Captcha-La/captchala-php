@@ -124,6 +124,42 @@ class ClientTest extends TestCase
         $this->assertSame([Client::MAIN_API_URL, Client::BACKUP_API_URL], $urls);
     }
 
+    public function testClientOnlyUnreachableIsCachedBriefly(): void
+    {
+        $client = new Client('k', 's');
+        $calls = 0;
+        $client->setTransport(function () use (&$calls) {
+            $calls++;
+            return null; // main and backup both unreachable
+        });
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->assertTrue($client->validate('client_x')->isValid());
+        }
+        // one probe per endpoint, then the negative result is served from the cache
+        $this->assertSame(2, $calls);
+        $this->assertSame(5, Client::UNREACHABLE_CACHE_TTL);
+    }
+
+    /** @dataProvider clientOnlyTokens */
+    public function testRejectClientOnlyRefusesWithoutProbing(string $token): void
+    {
+        $client = new Client('k', 's');
+        $client->setRejectClientOnly(true);
+        $calls = 0;
+        $client->setTransport(function () use (&$calls) {
+            $calls++;
+            return null; // even with the API unreachable
+        });
+
+        $result = $client->validate($token);
+
+        $this->assertFalse($result->isValid());
+        $this->assertTrue($result->isClientOnly());
+        $this->assertSame(Client::ERROR_CLIENT_ONLY_POLICY, $result->getError());
+        $this->assertSame(0, $calls);
+    }
+
     public function testClientOnlyReachabilityIsCached(): void
     {
         $client = new Client('k', 's');
@@ -458,7 +494,8 @@ class ClientTest extends TestCase
         $this->assertEquals(1700000000, $r->getIssuedAt());
         $this->assertEquals(Client::ISSUE_API_URL, $captured['url']);
         $this->assertEquals('login', $captured['body']['action']);
-        $this->assertEquals('1.2.3.4', $captured['body']['binding_ip']);
+        $this->assertEquals('1.2.3.4', $captured['body']['bind_ip']);
+        $this->assertArrayNotHasKey('binding_ip', $captured['body']);
         $this->assertEquals(600, $captured['body']['ttl']);
         $this->assertEquals(5, $captured['body']['max_uses']);
         $this->assertEquals('user-42', $captured['body']['bind_uid']);

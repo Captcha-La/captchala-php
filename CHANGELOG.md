@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.6] - Unreleased
+
+### Added
+- `setRejectClientOnly(true)`: always reject client-only tokens (`client_` /
+  `co_`) without probing, error `client_only_rejected_by_policy`. For actions
+  that should fail closed during an outage (login, payment).
+
+### Changed
+- Reachability probes for client-only tokens now also cache "unreachable"
+  results, for 5 seconds (`UNREACHABLE_CACHE_TTL`), so an outage no longer makes
+  every request wait for two probe timeouts. "Reachable" is still cached for 30
+  seconds.
+- With the APCu extension enabled, the probe cache is shared across PHP-FPM
+  workers and only one worker probes an endpoint at a time (the others wait for
+  its result, bounded by the probe timeout).
+- `issueServerToken()` sends the user IP as `bind_ip`, the name used in the API
+  docs. The server still accepts the old `binding_ip`, so older SDK versions keep
+  working. The PHP parameter name is unchanged.
+
 ## [1.2.5] - 2026-10-27
 
 ### Security

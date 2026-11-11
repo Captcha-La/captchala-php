@@ -183,7 +183,16 @@ $result = $client->moderationText('user comment here', $user->id);
 2. 否则探测备用服务（超时 2 秒），有任意 HTTP 响应同样拒绝（设备本应拿到 `offline_` Token）。
 3. 只有两者都不可达（网络错误/超时）时才 `isValid()=true`、`isClientOnly()=true`、`isOffline()=true`。
 
-"可达"结果在进程内（每个 PHP worker）缓存 30 秒。可用 `Client::isClientOnlyToken($token)` 判断前缀。
+探测结果会缓存：「可达」缓存 30 秒，「不可达」缓存 5 秒，故障期间不会每个请求都等两次超时。
+启用 APCu 扩展时，缓存由所有 PHP-FPM worker 共享，同一时刻只有一个 worker 去探测同一个地址；
+没有 APCu 时为进程内缓存。可用 `Client::isClientOnlyToken($token)` 判断前缀。
+
+登录、支付等敏感操作可以选择在故障期间也拒绝纯客户端 Token：
+
+```php
+$client->setRejectClientOnly(true);
+// client_ / co_ → isValid()=false，getError()='client_only_rejected_by_policy'
+```
 
 ## 完整示例
 

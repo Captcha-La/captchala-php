@@ -198,8 +198,19 @@ record. Since v1.2.5 the SDK no longer accepts them blindly:
 3. Only if both are unreachable (network error / timeout) → `isValid()=true`,
    `isClientOnly()=true`, `isOffline()=true`.
 
-A positive "reachable" probe result is cached in-process (per PHP worker) for
-30 seconds. Use `Client::isClientOnlyToken($token)` to detect these prefixes.
+Probe results are cached: "reachable" for 30 seconds, "unreachable" for 5
+seconds, so an outage does not make every request wait for two timeouts. With
+the APCu extension enabled the cache is shared by all PHP-FPM workers and only
+one worker probes a given endpoint at a time; without APCu it is per process.
+Use `Client::isClientOnlyToken($token)` to detect these prefixes.
+
+For sensitive actions (login, payment) you can refuse client-only tokens even
+during an outage:
+
+```php
+$client->setRejectClientOnly(true);
+// client_ / co_ tokens -> isValid()=false, getError()='client_only_rejected_by_policy'
+```
 
 ## Complete Example
 
