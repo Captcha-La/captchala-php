@@ -1,8 +1,8 @@
 # Captchala PHP SDK
 
-服务端验证 Captcha Token 的 PHP SDK。
+[English](https://github.com/Captcha-La/captchala-php/blob/main/README.md) · **简体中文** · [日本語](https://github.com/Captcha-La/captchala-php/blob/main/README.ja.md) · [한국어](https://github.com/Captcha-La/captchala-php/blob/main/README.ko.md) · [Español](https://github.com/Captcha-La/captchala-php/blob/main/README.es.md) · [Português (BR)](https://github.com/Captcha-La/captchala-php/blob/main/README.pt-BR.md) · [Deutsch](https://github.com/Captcha-La/captchala-php/blob/main/README.de.md)
 
-[English](README.md) | **简体中文**
+服务端验证 Captcha Token 的 PHP SDK。
 
 - [官网](https://captcha.la)
 - [文档](https://docs.captcha.la/zh-CN/sdk/server-php)
