@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.9] - 2026-11-27
+
+### Fixed
+- CMS widget (bind mode): the automatic form submit now carries the clicked submit button's name and value, so forms that check it (for example WooCommerce login and register) go through.
+
 ## [1.2.8] - 2026-11-27
 
 ### Changed

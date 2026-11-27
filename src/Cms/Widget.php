@@ -236,6 +236,16 @@ final class Widget
             .             'if(form){if(product==="bind"){setTimeout(function(){'
             .                 'if(form.dataset.captchalaSubmitted==="1"){return;}'
             .                 'form.dataset.captchalaSubmitted="1";'
+            // form.submit() does not send the clicked submit button, and some
+            // forms (e.g. WooCommerce login / register) only act when its
+            // name is present. Carry the button's name/value as a hidden field.
+            .                 'var sb=findSubmit(form);'
+            .                 'if(sb){if(sb.name){if(!form.querySelector("input[data-captchala-submitter]")){'
+            .                     'var hs=document.createElement("input");'
+            .                     'hs.type="hidden"; hs.name=sb.name; hs.value=sb.value||"";'
+            .                     'hs.setAttribute("data-captchala-submitter","1");'
+            .                     'form.appendChild(hs);'
+            .                 '}}}'
             .                 'try{HTMLFormElement.prototype.submit.call(form);}catch(e){console.error("[captchala] auto-submit failed",e);}'
             .             '},120);}}'
             .         '}).onError(function(err){'
