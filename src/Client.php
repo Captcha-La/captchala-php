@@ -30,11 +30,11 @@ class Client
     private int $timeout;
 
     // API endpoints
-    public const MAIN_API_URL = 'https://apiv1.captcha.la/v1/validate';
+    public const MAIN_API_URL = 'https://verify.captcha.la/v1/validate';
     public const BACKUP_API_URL = 'https://fallbackapiv1.captchala.com/api/validate';
-    public const ISSUE_API_URL = 'https://apiv1.captcha.la/v1/server/challenge/issue';
-    public const MODERATION_CHECK_URL = 'https://apiv1.captcha.la/v1/moderation/check';
-    public const MODERATION_TEXT_URL = 'https://apiv1.captcha.la/v1/moderation/text';
+    public const ISSUE_API_URL = 'https://verify.captcha.la/v1/server/challenge/issue';
+    public const MODERATION_CHECK_URL = 'https://verify.captcha.la/v1/moderation/check';
+    public const MODERATION_TEXT_URL = 'https://verify.captcha.la/v1/moderation/text';
 
     // Token prefixes
     public const PREFIX_MAIN = 'pt_';        // Main API token
@@ -73,17 +73,9 @@ class Client
     /** When true, client-only tokens are always rejected without probing (see setRejectClientOnly). */
     private bool $rejectClientOnly = false;
 
-    /**
-     * Optional override for the main API endpoint. Mainly used for tests.
-     */
+    /** Endpoint overrides for this package's own tests only (set via reflection). */
     private ?string $baseUrl = null;
-
-    /**
-     * Optional override for the backup API endpoint. Mainly used for tests.
-     */
     private ?string $backupUrl = null;
-
-    /** Optional URL overrides for the new endpoints. Mainly used for tests. */
     private ?string $issueUrl = null;
     private ?string $moderationCheckUrl = null;
     private ?string $moderationTextUrl = null;
@@ -111,25 +103,20 @@ class Client
         $this->timeout = $timeout;
     }
 
-    /**
-     * Override the main API URL. Intended for tests.
-     */
-    public function setBaseUrl(?string $url): void
-    {
-        $this->baseUrl = $url;
-    }
+    /** @deprecated Has no effect. Requests always go to the CaptchaLa API endpoints. */
+    public function setBaseUrl(?string $url): void {}
 
-    /**
-     * Override the backup API URL. Intended for tests.
-     */
-    public function setBackupUrl(?string $url): void
-    {
-        $this->backupUrl = $url;
-    }
+    /** @deprecated Has no effect. Requests always go to the CaptchaLa API endpoints. */
+    public function setBackupUrl(?string $url): void {}
 
-    public function setIssueUrl(?string $url): void { $this->issueUrl = $url; }
-    public function setModerationCheckUrl(?string $url): void { $this->moderationCheckUrl = $url; }
-    public function setModerationTextUrl(?string $url): void { $this->moderationTextUrl = $url; }
+    /** @deprecated Has no effect. Requests always go to the CaptchaLa API endpoints. */
+    public function setIssueUrl(?string $url): void {}
+
+    /** @deprecated Has no effect. Requests always go to the CaptchaLa API endpoints. */
+    public function setModerationCheckUrl(?string $url): void {}
+
+    /** @deprecated Has no effect. Requests always go to the CaptchaLa API endpoints. */
+    public function setModerationTextUrl(?string $url): void {}
 
     /**
      * Always reject client-only tokens (client_ / co_), even when the Captchala API is

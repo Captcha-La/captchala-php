@@ -42,6 +42,39 @@ class ClientTest extends TestCase
      * Start a PHP built-in web server that answers every request with a
      * non-JSON 503 (any HTTP response counts as "reachable").
      */
+    /** Sets a private endpoint override (the public API has none). */
+    private static function override(Client $client, string $prop, string $url): void
+    {
+        $p = new \ReflectionProperty(Client::class, $prop);
+        $p->setAccessible(true);
+        $p->setValue($client, $url);
+    }
+
+    public function testUrlSettersHaveNoEffect(): void
+    {
+        $client = new Client('k', 's');
+        $urls = [];
+        $client->setTransport(function (string $url) use (&$urls) {
+            $urls[] = $url;
+            return ['code' => 0, 'data' => ['valid' => true]];
+        });
+        $client->setBaseUrl('https://elsewhere.example/v1/validate');
+        $client->setBackupUrl('https://elsewhere.example/api/validate');
+        $client->setIssueUrl('https://elsewhere.example/issue');
+        $client->setModerationCheckUrl('https://elsewhere.example/check');
+        $client->setModerationTextUrl('https://elsewhere.example/text');
+        $client->validate('pt_x');
+        $client->validate('offline_x');
+        $client->issueServerToken('login');
+        $client->moderationText('hello');
+        $this->assertSame([
+            'https://verify.captcha.la/v1/validate',
+            'https://fallbackapiv1.captchala.com/api/validate',
+            'https://verify.captcha.la/v1/server/challenge/issue',
+            'https://verify.captcha.la/v1/moderation/text',
+        ], $urls);
+    }
+
     private static function startServer(): string
     {
         if (self::$server === null) {
@@ -77,8 +110,8 @@ class ClientTest extends TestCase
     public function testClientOnlyTokenAcceptedWhenBothApisUnreachable(string $token): void
     {
         $client = new Client('k', 's');
-        $client->setBaseUrl('https://main.invalid/v1/validate');
-        $client->setBackupUrl('https://backup.invalid/api/validate');
+        self::override($client, 'baseUrl', 'https://main.invalid/v1/validate');
+        self::override($client, 'backupUrl', 'https://backup.invalid/api/validate');
         $client->setTransport(fn () => null); // every request fails at transport level
 
         $result = $client->validate($token);
@@ -181,8 +214,8 @@ class ClientTest extends TestCase
             $this->markTestSkipped('curl not available');
         }
         $client = new Client('k', 's');
-        $client->setBaseUrl('http://127.0.0.1:1/v1/validate');
-        $client->setBackupUrl('http://127.0.0.1:2/api/validate');
+        self::override($client, 'baseUrl', 'http://127.0.0.1:1/v1/validate');
+        self::override($client, 'backupUrl', 'http://127.0.0.1:2/api/validate');
 
         $result = $client->validate('client_x');
 
@@ -194,8 +227,8 @@ class ClientTest extends TestCase
     {
         $url = self::startServer();
         $client = new Client('k', 's');
-        $client->setBaseUrl('http://127.0.0.1:1/v1/validate');
-        $client->setBackupUrl($url);
+        self::override($client, 'baseUrl', 'http://127.0.0.1:1/v1/validate');
+        self::override($client, 'backupUrl', $url);
 
         $result = $client->validate('co_x');
 
@@ -208,7 +241,7 @@ class ClientTest extends TestCase
     {
         $url = self::startServer();
         $client = new Client('k', 's');
-        $client->setBaseUrl($url);
+        self::override($client, 'baseUrl', $url);
 
         $result = $client->validate('pt_x');
 
