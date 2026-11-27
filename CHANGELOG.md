@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.8] - 2026-11-27
+
+### Changed
+- Validation, token issuing and moderation always use the CaptchaLa API endpoints (`https://verify.captcha.la`; offline tokens keep using the backup service).
+
 ## [1.2.7] - 2026-11-27
 
 ### Changed
 - README in Japanese, Korean, Spanish, Portuguese (BR) and German, with a language switcher in every README.
-- Validation, token issuing and moderation always use the CaptchaLa API endpoints (`https://verify.captcha.la`; offline tokens keep using the backup service).
 
 ## [1.2.6] - 2026-11-12
 
